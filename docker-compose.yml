@@ -1,0 +1,60 @@
+version: "3.9"
+
+services:
+  bot:
+    build: ./bot
+    container_name: faro_bot
+    env_file: .env
+    restart: unless-stopped
+    # Accesos a puertos locales del host (5052/5064/6060)
+    network_mode: host
+    volumes:
+      - ./bot:/app
+      - /proc:/host/proc:ro
+      - /:/host:ro
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os,sys; sys.exit(0 if os.getenv('TELEGRAM_BOT_TOKEN') else 1)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: faro_prometheus
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - bot
+    env_file: .env
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./prometheus/rules:/etc/prometheus/rules:ro
+      - prom_data:/prometheus
+    deploy:
+      replicas: 0
+    # Levantamos solo si ALERTS_ENABLED=true (ver abajo 'profiles')
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: faro_alertmanager
+    restart: unless-stopped
+    network_mode: host
+    depends_on:
+      - prometheus
+    env_file: .env
+    volumes:
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - am_data:/alertmanager
+    deploy:
+      replicas: 0
+
+volumes:
+  prom_data:
+  am_data:
+
+# perfiles: para habilitar alertas fácil
+# usa: ALERTS_ENABLED=true en .env + `docker compose --profile alerts up -d`
+profiles:
+  alerts:
+    - prometheus
+    - alertmanager
