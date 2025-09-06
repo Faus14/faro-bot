@@ -40,7 +40,9 @@ En Telegram, háblale a tu bot:
 
 Si luego querés activar alertas, seguí la sección "Activar alertas (opcional)" más abajo.
 
-## 🤖 Crear tu bot en Telegram (BotFather)
+## 🤖 Crear tu bot en Telegram (BotFather) - OBLIGATORIO
+
+**Este paso es obligatorio para que Faro funcione:**
 
 1. Abrí [@BotFather](https://t.me/botfather)
 2. Enviá `/newbot`
