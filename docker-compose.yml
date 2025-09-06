@@ -1,42 +1,58 @@
-version: "3.9"
-
 services:
   bot:
-    build: ./bot
     container_name: faro_bot
-    env_file: .env
+    build: ./bot
     restart: unless-stopped
+    env_file: .env
     network_mode: host
     volumes:
-      - ./bot:/app
+      - ./bot:/app:ro
       - /proc:/host/proc:ro
       - /:/host:ro
-    healthcheck:
-      test: ["CMD", "python", "-c", "import os,sys; sys.exit(0 if os.getenv('TELEGRAM_BOT_TOKEN') else 1)"]
-      interval: 30s
-      timeout: 5s
-      retries: 3
+    depends_on:
+      - prometheus
+      - alertmanager
 
   prometheus:
-    image: prom/prometheus:v2.54.1
     container_name: faro_prometheus
+    image: prom/prometheus:latest
     restart: unless-stopped
-    network_mode: host
     env_file: .env
+    network_mode: host
     volumes:
-      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
-      - ./prometheus/rules:/etc/prometheus/rules:ro
       - prom_data:/prometheus
+      - ./prometheus/entrypoint.sh:/entrypoint.sh:ro
+      - ./prometheus/prometheus.yml.tmpl:/etc/prometheus/prometheus.yml.tmpl:ro
+      - ./prometheus/rules/faro-core.yml.tmpl:/etc/prometheus/rules/faro-core.yml.tmpl:ro
+    command: ["/bin/sh", "/entrypoint.sh"]
 
   alertmanager:
-    image: prom/alertmanager:v0.27.0
     container_name: faro_alertmanager
+    image: prom/alertmanager:latest
+    restart: unless-stopped
+    env_file: .env
+    network_mode: host
+    volumes:
+      - am_data:/alertmanager
+      - ./alertmanager/entrypoint.sh:/entrypoint.sh:ro
+      - ./alertmanager/alertmanager.yml.tmpl:/etc/alertmanager/alertmanager.yml.tmpl:ro
+    command: ["/bin/sh", "/entrypoint.sh"]
+
+  node-exporter:
+    container_name: faro_node_exporter
+    image: quay.io/prometheus/node-exporter:latest
     restart: unless-stopped
     network_mode: host
-    env_file: .env
+    pid: host
     volumes:
-      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
-      - am_data:/alertmanager
+      - /proc:/host/proc:ro
+      - /sys:/host/sys:ro
+      - /:/rootfs:ro
+    command:
+      - '--path.procfs=/host/proc'
+      - '--path.rootfs=/rootfs'
+      - '--path.sysfs=/host/sys'
+      - '--web.listen-address=127.0.0.1:9100'
 
 volumes:
   prom_data:

@@ -1,294 +1,265 @@
-# 🌐 Faro — Bot de Telegram + Alertas para Validadores
+# 🛡️ Faro Bot - Ethereum Validator Monitoring
 
-Faro es un bot de Telegram que corre en el mismo servidor que tu validador y permite:
+Un bot de Telegram completo para monitorear nodos validadores de Ethereum, con alertas automáticas y soporte para múltiples clientes (Geth, Nethermind, Besu, Lighthouse, Prysm, Teku, Nimbus).
 
-- `/nodo <alias>` → estado del nodo: VC/BN/EL (up/down, peers, sync)
-- `/host <alias>` → CPU, RAM y Disco del servidor (sin Node Exporter)
-- `/atesta <alias>` → última attestation + eficiencia (Hoodi / beaconcha.in)
+## ✨ Características
 
-**Alertas opcionales** (Prometheus + Alertmanager → Telegram): RAM alta, disco >90%, peers bajos, VC/BN/EL caídos.
+- 📱 **Control desde Telegram**: Consulta estado de tus nodos desde cualquier lugar
+- 🔔 **Alertas automáticas**: Notificaciones en tiempo real por Telegram
+- 🎯 **Multi-cliente**: Compatible con todos los principales clientes de Ethereum
+- 🔧 **Completamente configurable**: Habilita/deshabilita componentes según tu setup
+- 📊 **Monitoreo integral**: Execution Layer, Beacon Node, Validator Client y recursos del sistema
+- 🚀 **Fácil instalación**: Docker Compose con configuración automática
 
-> **Nota:** No necesitas Prometheus ni Grafana para usar los comandos del bot. Las alertas son opcionales (pueden activarse con un perfil de Compose).
+## 🏗️ Arquitectura
 
-## 📋 Requisitos previos
+```
+┌─────────────────┐    ┌──────────────┐    ┌─────────────┐
+│   Telegram Bot  │ ←→ │ Prometheus   │ ←→ │ Your Nodes  │
+│   (Commands)    │    │ (Metrics)    │    │ EL/BN/VC    │
+└─────────────────┘    └──────────────┘    └─────────────┘
+         ↑                       ↑
+         │              ┌──────────────┐
+         └──────────────│ Alertmanager │
+                        │ (Alerts)     │
+                        └──────────────┘
+```
 
-### 1. 🤖 Crear tu bot en Telegram (BotFather) - OBLIGATORIO
+## 🚀 Instalación Rápida
 
-**Este paso es obligatorio para que Faro funcione:**
-
-1. Abrí [@BotFather](https://t.me/botfather)
-2. Enviá `/newbot`
-3. Elegí nombre y username (debe terminar en `bot`, ej.: `@FaroSentinelBot`)
-4. Copiá el **TOKEN** que te da BotFather (formato `123456:ABC...`)
-5. Guardá este token, lo vas a necesitar en el `.env`
-
-### 2. ⚙️ Configurar métricas en tu nodo
-
-Para que el bot lea estado local, asegurate de habilitar métricas/REST:
-
-#### Geth (Execution)
-**Flags del servicio:**
+### 1. Clona el repositorio
 ```bash
---metrics --metrics.addr 127.0.0.1 --metrics.port 6060
-```
-
-**Prueba rápida:**
-```bash
-curl -s http://127.0.0.1:6060/debug/metrics | grep '^geth_peers '
-```
-
-#### Lighthouse — Beacon Node (REST)
-```bash
---http --http-address 127.0.0.1 --http-port 5052
-```
-
-**Prueba:**
-```bash
-curl -s http://127.0.0.1:5052/eth/v1/node/peer_count
-```
-
-#### Lighthouse — Validator Client (metrics)
-```bash
---metrics --metrics-address 127.0.0.1 --metrics-port 5064
-```
-
-**Prueba:**
-```bash
-curl -s http://127.0.0.1:5064/metrics | head
-```
-
-**Host:** Como el bot corre en el mismo servidor, `/host` usa `/proc` y `/` del host (no hace falta Node Exporter).
-
-### 3. 📱 Obtener chat_id para alertas (OPCIONAL)
-
-**Solo si vas a usar alertas:** Mandá un mensaje a [@RawDataBot](https://t.me/rawdatabot) o a tu bot y copiá el `chat.id`. Lo vas a necesitar para `ALERTS_CHAT_ID` en el `.env`.
-
-## 📇 Dato requerido: `validator_index`
-
-Para usar `/atesta` y ver la efectividad/última attestation, Faro necesita saber **qué validador** consultar.
-Cuando registres tu nodo con `/addlocal`, **debes pasar el `validator_index`**:
-
-```
-/addlocal <alias> <validator_index>
-ejemplo:
-/addlocal VPS01 1212617
-```
-
-> Si tenés **varios validadores**, repetí `/addlocal` con un alias distinto por cada uno.
-
-### 🔎 ¿Cómo obtengo mi `validator_index`?
-
-Elegí cualquiera de estos métodos:
-
-**A) Desde tu Beacon Node (REST) — usando tu pubkey**
-1. Tomá tu `validator_pubkey` (0x…)
-2. Ejecutá en el servidor (BN en 127.0.0.1:5052):
-   ```bash
-   curl -s "http://127.0.0.1:5052/eth/v1/beacon/states/head/validators?id=0xTU_PUBLIC_KEY" | jq -r '.data[0].index'
-   ```
-
-El número devuelto es tu `validator_index`.
-
-**B) Vía beaconcha.in / Hoodi (web)**
-1. Buscá tu **pubkey** o **address** en el explorador (beaconcha.in / tu instancia Hoodi).
-2. Abrí la página del validador → ahí verás el **Index** (número entero).
-
-**C) Si corrés Lighthouse y conocés el key store**
-* Podés listar tus validadores y sus pubkeys con Lighthouse; luego usa el método (A) para convertir **pubkey → index**.
-
-**D) Desde un dump/archivo propio**
-* Si guardás el mapping pubkey ↔ index, tomá el **index** directamente desde ahí.
-
-✅ **Recomendado:** verificá que el índice es correcto ejecutando `/atesta <alias>`; deberías ver `epoch`, `slot` y `eficiencia`.
-
-## ✅ Instalación y configuración
-
-**Dónde ejecutar:** todos estos comandos se ejecutan en el servidor donde corre tu validador, dentro de una terminal (shell).
-
-```bash
-# 1) Clonar el repositorio
 git clone https://github.com/Faus14/faro-bot.git
 cd faro-bot
+```
 
-# 2) Configurar variables de entorno
+### 2. Crea tu bot de Telegram
+
+1. Habla con [@BotFather](https://t.me/botfather) en Telegram
+2. Ejecuta `/newbot` y sigue las instrucciones
+3. Guarda el **token** que te proporciona (formato: `123456789:ABCdef...`)
+4. Obtén tu **Chat ID**:
+   - Envía un mensaje a tu bot
+   - Ve a: `https://api.telegram.org/bot<TU_TOKEN>/getUpdates`
+   - Busca `"chat":{"id":12345678...}` en la respuesta
+
+### 3. Configuración del .env
+
+Copia el archivo de ejemplo y configúralo:
+```bash
 cp .env.example .env
-nano .env   # configurá tu TELEGRAM_BOT_TOKEN (OBLIGATORIO) y opcionalmente ALERTS_CHAT_ID
+nano .env
 ```
 
-### 🔧 Variables de entorno (.env)
-
+**Configuración mínima obligatoria:**
 ```bash
-# ===== Bot de Telegram =====
-TELEGRAM_BOT_TOKEN=   # <— OBLIGATORIO - sin esto no funciona nada
-BOT_PUBLIC_NAME=@FaroBot
-BRAND_NAME=Faro
+# ===== Bot de Telegram (OBLIGATORIO) =====
+TELEGRAM_BOT_TOKEN=123456789:ABCdef_tu_token_aqui
+ALERTS_CHAT_ID=12345678  # Tu chat ID
 
-# ===== Endpoints locales por defecto =====
-DEFAULT_EL_URL=http://127.0.0.1:6060/debug/metrics
-DEFAULT_BN_REST_BASE=http://127.0.0.1:5052
-DEFAULT_VC_METRICS_URL=http://127.0.0.1:5064/metrics
-# Si lo dejás vacío, /host usa /proc y / (no hace falta Node Exporter)
-DEFAULT_HOST_METRICS_URL=
-
-# ===== Hoodi API (para /atesta) =====
-HUDI_API_BASE=https://hoodi.beaconcha.in/api/v1
-
-# ===== Alertas (Prometheus/Alertmanager) =====
-ALERTS_ENABLED=false          # ponelo en true para levantar Prometheus + Alertmanager
-ALERTS_CHAT_ID=               # ej. 5184123209 (tu chat o grupo) - OPCIONAL, solo para alertas
+# ===== Validador =====
+VALIDATOR_INDEX=1234567  # Índice de tu validador en Beaconcha.in
 ```
 
-## 🚀 Ejecutar Faro
+### 4. Ajusta según tu stack
 
-### Modo básico (solo comandos del bot)
-
+#### Para Lighthouse (default):
 ```bash
-# Levantar solo el bot
-docker compose up -d --build
-docker compose logs -f bot   # ver progreso (Ctrl+C para salir)
+ENABLE_EL=true
+ENABLE_BN=true  
+ENABLE_VC=true
+
+EL_METRICS_HOSTPORT=127.0.0.1:6060
+EL_METRICS_PATH=/debug/metrics  # Geth
+
+BN_METRICS_HOSTPORT=127.0.0.1:5054
+BN_REST_BASE=http://127.0.0.1:5052
+
+VC_METRICS_HOSTPORT=127.0.0.1:5064
 ```
 
-### Probar en Telegram
-
-En Telegram, háblale a tu bot:
-
-```
-/start
-/addlocal VPS01 1212617
-/nodo VPS01
-/host VPS01
-/atesta VPS01
-```
-
-### Activar alertas (opcional)
-
-Si querés recibir alertas de Prometheus/Alertmanager en Telegram:
-
-#### 1. Validar reglas (recomendado)
+#### Para Prysm:
 ```bash
-docker run --rm -v $(pwd)/prometheus/rules:/rules prom/prometheus \
-  promtool check rules /rules/faro-core.yml
+ENABLE_EL=true
+ENABLE_BN=true
+ENABLE_VC=true
+
+# Geth/Nethermind/Besu (según uses)
+EL_METRICS_HOSTPORT=127.0.0.1:6060
+EL_METRICS_PATH=/debug/metrics  # /metrics para Nethermind/Besu
+
+# Prysm Beacon Node
+BN_METRICS_HOSTPORT=127.0.0.1:8080
+BN_REST_BASE=http://127.0.0.1:3500
+
+# Prysm Validator
+VC_METRICS_HOSTPORT=127.0.0.1:8081
 ```
 
-#### 2. Habilitar alertas
+#### Para Teku:
 ```bash
-# Habilitar el flag en .env
-sed -i 's/^ALERTS_ENABLED=.*/ALERTS_ENABLED=true/' .env
+ENABLE_EL=true
+ENABLE_BN=true
+ENABLE_VC=true
 
-# Levantar servicios con el perfil 'alerts'
-docker compose --profile alerts up -d
+# Execution client
+EL_METRICS_HOSTPORT=127.0.0.1:6060
+EL_METRICS_PATH=/debug/metrics  # o /metrics
+
+# Teku (BN+VC integrado)
+BN_METRICS_HOSTPORT=127.0.0.1:8008
+BN_REST_BASE=http://127.0.0.1:5051
+VC_METRICS_HOSTPORT=127.0.0.1:8008  # Mismo puerto
 ```
 
-#### 3. Verificar salud
+### 5. Arranca el sistema
 ```bash
-# Listar grupos de reglas activos en Prometheus
-curl -s http://127.0.0.1:9090/api/v1/rules | jq '.data.groups[].name'
-
-# Ver salud de Alertmanager
-curl -s http://127.0.0.1:9093/-/healthy
+docker-compose up -d
 ```
 
-> **Importante:** `prometheus/prometheus.yml` ya trae `scrape_configs` apuntando a `127.0.0.1` (geth/lighthouse/VC). Si tus puertos son distintos, ajustá ese archivo y reiniciá el servicio de Prometheus del compose.
+### 6. Verifica que funciona
+Envía `/start` a tu bot en Telegram. Deberías ver el menú de comandos.
 
-## 📜 Comandos del bot
+## 📱 Comandos del Bot
 
-- `/start` → ayuda
-- `/addlocal <alias> <validator_index>` → registra nodo local con defaults (EL/BN/VC)
-- `/nodes` → lista nodos
-- `/nodo <alias>` → VC/BN/EL (up/down, peers, sync)
-- `/host <alias>` → CPU, RAM, Disco del servidor
-- `/atesta <alias>` → última attestation + eficiencia (Hoodi)
+- `/start` - Menú de ayuda
+- `/nodo` - Estado de Execution Layer, Beacon Node y Validator Client
+- `/host` - Uso de CPU, RAM y disco del servidor
+- `/atesta` - Información de attestations y efectividad del validador
+- `/nodes` - Lista de nodos configurados
 
-## 🐳 Docker Compose
+## 🔧 Configuración Avanzada
 
-- **Dónde está:** `docker-compose.yml` en la raíz del proyecto
-- **Qué hace:** levanta el bot (siempre). Y, si activás alertas, levanta Prometheus y Alertmanager usando el perfil `alerts`
+### Switches de Componentes
+Habilita/deshabilita según tu setup:
+```bash
+ENABLE_EL=true           # Execution Layer (Geth/Nethermind/Besu)
+ENABLE_BN=true           # Beacon Node 
+ENABLE_VC=true           # Validator Client
+ENABLE_NODE_EXPORTER=true # Métricas del sistema
+```
 
-**Puntos clave:**
-- `network_mode: host` → el contenedor del bot accede a `127.0.0.1:5052/5064/6060`
-- Volúmenes `/proc` y `/` en solo lectura → `/host` sin Node Exporter
-- Prometheus y Alertmanager también usan `network_mode: host` (puertos 9090 y 9093)
+### Umbrales de Alertas
+Personaliza cuándo recibir alertas:
+```bash
+HOST_MEM_THRESHOLD=90    # % RAM
+HOST_DISK_THRESHOLD=90   # % Disco  
+HOST_CPU_THRESHOLD=90    # % CPU
+BN_PEERS_THRESHOLD=30    # Peers mínimos Beacon Node
+GETH_PEERS_THRESHOLD=25  # Peers mínimos Execution Layer
+```
 
-## 📁 Estructura del proyecto
+## 🚨 Alertas Automáticas
+
+El bot enviará alertas automáticamente por:
+
+**Críticas** (inmediatas):
+- Validator Client caído
+- Beacon Node caído  
+- Execution Layer caído
+- Validator sin publicar attestations
+
+**Advertencias** (5-10 min):
+- Pocos peers conectados
+- Uso alto de CPU/RAM/Disco
+
+## 📊 Compatibilidad de Clientes
+
+### Execution Layer
+| Cliente | Puerto por Defecto | Path | Config |
+|---------|-------------------|------|--------|
+| **Geth** | 6060 | `/debug/metrics` | `--metrics --metrics.port 6060` |
+| **Nethermind** | 6060 | `/metrics` | `--Metrics.Enabled=true --Metrics.Port=6060` |
+| **Besu** | 9545 | `/metrics` | `--metrics-enabled --metrics-port=9545` |
+
+### Beacon Node
+| Cliente | Métricas | REST API | Config |
+|---------|----------|----------|--------|
+| **Lighthouse** | 5054 | 5052 | `--metrics --http` |
+| **Prysm** | 8080 | 3500 | `--monitoring-host=0.0.0.0` |
+| **Teku** | 8008 | 5051 | `--metrics-enabled --rest-api-enabled` |
+| **Nimbus** | 8008 | 5052 | `--metrics --rest` |
+
+### Validator Client  
+| Cliente | Puerto por Defecto | Config |
+|---------|-------------------|--------|
+| **Lighthouse** | 5064 | `--metrics` |
+| **Prysm** | 8081 | `--monitoring-host=0.0.0.0` |
+| **Teku** | 8009 | `--metrics-enabled` |
+| **Nimbus** | 8009 | `--metrics` |
+
+## 🐛 Solución de Problemas
+
+### El bot no responde
+```bash
+# Verifica que el bot esté corriendo
+docker-compose logs bot
+
+# Revisa la configuración
+cat .env | grep TELEGRAM
+```
+
+### No llegan alertas
+```bash
+# Verifica Alertmanager
+docker-compose logs alertmanager
+
+# Comprueba el Chat ID
+curl "https://api.telegram.org/bot<TU_TOKEN>/getUpdates"
+```
+
+### Métricas no disponibles
+```bash
+# Testa conexión directa
+curl http://127.0.0.1:5054/metrics  # Lighthouse BN
+curl http://127.0.0.1:6060/debug/metrics  # Geth
+
+# Revisa configuración de puertos
+netstat -tlnp | grep :5054
+```
+
+### El comando /nodo muestra "N/A"
+1. Verifica que los clientes expongan métricas en los puertos configurados
+2. Confirma que `ENABLE_*=true` para los componentes que usas
+3. Revisa que los paths sean correctos (`/metrics` vs `/debug/metrics`)
+
+## 📁 Estructura del Proyecto
 
 ```
 faro-bot/
-├─ README.md
-├─ .env.example
-├─ docker-compose.yml
-├─ bot/
-│  ├─ Dockerfile
-│  ├─ requirements.txt
-│  └─ bot.py
-├─ prometheus/
-│  ├─ prometheus.yml
-│  └─ rules/
-│     └─ faro-core.yml
-└─ alertmanager/
-   └─ alertmanager.yml
+├── .env.example              # Configuración de ejemplo
+├── docker-compose.yml        # Orquestación de servicios
+├── bot/
+│   ├── Dockerfile            # Bot de Telegram
+│   ├── bot.py                # Lógica principal
+│   └── requirements.txt      # Dependencias Python
+├── prometheus/
+│   ├── prometheus.yml.tmpl   # Config de Prometheus
+│   ├── entrypoint.sh         # Script de inicio
+│   └── rules/
+│       └── faro-core.yml.tmpl # Reglas de alertas
+└── alertmanager/
+    ├── alertmanager.yml.tmpl # Config de alertas
+    └── entrypoint.sh         # Script de inicio
 ```
-
-## 🧪 Verificación rápida
-
-### Estado del bot (logs):
-```bash
-docker compose logs -f bot
-```
-
-### Probar endpoints locales manualmente:
-```bash
-curl -s http://127.0.0.1:6060/debug/metrics | grep '^geth_peers '
-curl -s http://127.0.0.1:5052/eth/v1/node/peer_count
-curl -s http://127.0.0.1:5064/metrics | head
-```
-
-### Probar comandos en Telegram:
-```
-/addlocal VPS01 1212617
-/nodo VPS01
-/host VPS01
-/atesta VPS01
-```
-
-## 🛠️ Troubleshooting
-
-### El bot no arranca
-Revisá el token:
-```bash
-docker compose logs -f bot
-```
-Debe estar definido `TELEGRAM_BOT_TOKEN` en `.env`.
-
-### /nodo no muestra peers/sync
-Verificá puertos locales:
-```bash
-ss -lntp | egrep ':(5052|5064|6060)\s'
-```
-Probá con curl como en "Verificación rápida".
-
-### /host devuelve ?%
-- Esperá 2–3 s (el cálculo de CPU usa deltas)
-- Chequeá montajes de `/proc` y `/` en el compose
-
-### No llegan alertas
-1. Validá reglas con `promtool` (comando arriba)
-2. Revisá `ALERTS_CHAT_ID` y `TELEGRAM_BOT_TOKEN` en `.env`
-3. Mirá salud de AM: `curl -s http://127.0.0.1:9093/-/healthy`
-4. **Logs:**
-   ```bash
-   docker compose logs -f faro_prometheus
-   docker compose logs -f faro_alertmanager
-   ```
 
 ## 🔒 Seguridad
 
-- Faro no maneja claves ni secretos de tu validador
-- Endpoints de clientes son locales (`127.0.0.1`); no se exponen a Internet
-- Montajes del host son de sólo lectura
-- Alertas usan tu bot de Telegram y un `chat_id` (no hay datos sensibles)
+- El bot solo expone métricas en `127.0.0.1` (localhost)
+- No almacena datos sensibles en disco
+- Las comunicaciones con Telegram son encriptadas (HTTPS)
+- Acceso restringido por Chat ID de Telegram
 
-## 📜 Créditos / Licencia
+## 🆘 Soporte
 
-MIT / Apache-2.0 (elegí la que prefieras).
+- **Issues**: [GitHub Issues](https://github.com/Faus14/faro-bot/issues)
+- **Documentación**: Este README
+- **Telegram**: Contacta al desarrollador para soporte
 
-"Faro" por SEEDNodes (o tu branding)
+## 📄 Licencia
+
+Este proyecto está bajo la Licencia MIT. Ver archivo `LICENSE` para más detalles.
+
+---
+
+**🛡️ Mantén tus validadores seguros con Faro Bot**
