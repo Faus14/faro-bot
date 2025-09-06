@@ -26,6 +26,7 @@ services:
     restart: unless-stopped
     env_file: .env
     network_mode: host
+    user: "root"
     entrypoint: ["/bin/sh", "/entrypoint.sh"]
     volumes:
       - prom_data:/prometheus

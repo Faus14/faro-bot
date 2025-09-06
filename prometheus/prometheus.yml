@@ -28,4 +28,5 @@ scrape_configs:
 alerting:
   alertmanagers:
     - static_configs:
-        - targets: ['${AM_LISTEN}']
+        - targets: ['${AM_TARGET}']
+

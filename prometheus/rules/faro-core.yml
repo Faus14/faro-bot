@@ -4,8 +4,9 @@ groups:
 - name: validator.rules
   rules:
   - alert: ValidatorNoAttestations
-    # habilitar con ENABLE_VALIDATOR_NOATTEST=1
-    expr: (${ENABLE_VALIDATOR_NOATTEST} == 1) and (increase(lighthouse_validator_attestations_published_total[5m]) == 0)
+    expr: >-
+      (increase(lighthouse_validator_attestations_published_total[5m]) == 0)
+      and on() (vector(${ENABLE_VALIDATOR_NOATTEST}) == 1)
     for: 3m
     labels:
       severity: critical
@@ -13,8 +14,11 @@ groups:
     annotations:
       summary: "Validator no está publicando attestations"
       description: "No se detectaron attestations en los últimos 5 minutos."
+
   - alert: ValidatorDown
-    expr: (${ENABLE_VC_ALERT} == 1) and (up{job="validator"} == 0)
+    expr: >-
+      (up{job="validator"} == 0)
+      and on() (vector(${ENABLE_VC_ALERT}) == 1)
     for: 1m
     labels:
       severity: critical
@@ -27,7 +31,9 @@ groups:
 - name: beacon.rules
   rules:
   - alert: BeaconNodeDown
-    expr: (${ENABLE_BN_ALERT} == 1) and (up{job="beacon"} == 0)
+    expr: >-
+      (up{job="beacon"} == 0)
+      and on() (vector(${ENABLE_BN_ALERT}) == 1)
     for: 1m
     labels:
       severity: critical
@@ -35,8 +41,11 @@ groups:
     annotations:
       summary: "Beacon Node DOWN"
       description: "El BN no responde (job=beacon)."
+
   - alert: BeaconPeersLow
-    expr: (${ENABLE_BN_ALERT} == 1) and (lighthouse_network_peers_total < ${BN_PEERS_THRESHOLD})
+    expr: >-
+      (lighthouse_network_peers_total < ${BN_PEERS_THRESHOLD})
+      and on() (vector(${ENABLE_BN_ALERT}) == 1)
     for: 5m
     labels:
       severity: warning
@@ -49,7 +58,9 @@ groups:
 - name: execution.rules
   rules:
   - alert: ExecutionNodeDown
-    expr: (${ENABLE_EL_ALERT} == 1) and (up{job="el"} == 0)
+    expr: >-
+      (up{job="el"} == 0)
+      and on() (vector(${ENABLE_EL_ALERT}) == 1)
     for: 1m
     labels:
       severity: critical
@@ -57,8 +68,11 @@ groups:
     annotations:
       summary: "Execution Layer DOWN"
       description: "El Execution Layer no responde (job=el)."
+
   - alert: ExecutionPeersLow
-    expr: (${ENABLE_EL_ALERT} == 1) and ((geth_peers or nethermind_peers or besu_peers) < ${GETH_PEERS_THRESHOLD})
+    expr: >-
+      ((geth_peers or nethermind_peers or besu_peers) < ${GETH_PEERS_THRESHOLD})
+      and on() (vector(${ENABLE_EL_ALERT}) == 1)
     for: 5m
     labels:
       severity: warning
@@ -71,7 +85,9 @@ groups:
 - name: host.rules
   rules:
   - alert: HostMemoryHigh
-    expr: (${ENABLE_HOST_ALERT} == 1) and ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > ${HOST_MEM_THRESHOLD})
+    expr: >-
+      ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > ${HOST_MEM_THRESHOLD})
+      and on() (vector(${ENABLE_HOST_ALERT}) == 1)
     for: 1m
     labels:
       severity: warning
@@ -81,7 +97,12 @@ groups:
       description: "RAM >${HOST_MEM_THRESHOLD}% (actual: {{ $value | printf \"%.1f\" }}%)."
 
   - alert: HostDiskUsageHigh
-    expr: (${ENABLE_HOST_ALERT} == 1) and ((1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) ) * 100 > ${HOST_DISK_THRESHOLD})
+    expr: >-
+      ((1 - (
+        node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} /
+        node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}
+      )) * 100 > ${HOST_DISK_THRESHOLD})
+      and on() (vector(${ENABLE_HOST_ALERT}) == 1)
     for: 10m
     labels:
       severity: warning
@@ -91,7 +112,9 @@ groups:
       description: "Disco / >${HOST_DISK_THRESHOLD}% (actual: {{ $value | printf \"%.1f\" }}%)."
 
   - alert: HostCPUHigh
-    expr: (${ENABLE_HOST_ALERT} == 1) and (100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > ${HOST_CPU_THRESHOLD})
+    expr: >-
+      (100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > ${HOST_CPU_THRESHOLD})
+      and on() (vector(${ENABLE_HOST_ALERT}) == 1)
     for: 10m
     labels:
       severity: warning
