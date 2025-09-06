@@ -130,136 +130,71 @@ Envía `/start` a tu bot en Telegram. Deberías ver el menú de comandos.
 
 ## 🔧 Configuración Avanzada
 
-### Switches de Componentes
-Habilita/deshabilita según tu setup:
+**Switches**
 ```bash
-ENABLE_EL=true           # Execution Layer (Geth/Nethermind/Besu)
-ENABLE_BN=true           # Beacon Node 
-ENABLE_VC=true           # Validator Client
-ENABLE_NODE_EXPORTER=true # Métricas del sistema
+ENABLE_EL=true
+ENABLE_BN=true
+ENABLE_VC=true
+ENABLE_NODE_EXPORTER=true
 ```
 
-### Umbrales de Alertas
-Personaliza cuándo recibir alertas:
+**Umbrales**
 ```bash
-HOST_MEM_THRESHOLD=90    # % RAM
-HOST_DISK_THRESHOLD=90   # % Disco  
-HOST_CPU_THRESHOLD=90    # % CPU
-BN_PEERS_THRESHOLD=30    # Peers mínimos Beacon Node
-GETH_PEERS_THRESHOLD=25  # Peers mínimos Execution Layer
+HOST_MEM_THRESHOLD=90
+HOST_DISK_THRESHOLD=90
+HOST_CPU_THRESHOLD=90
+BN_PEERS_THRESHOLD=30
+GETH_PEERS_THRESHOLD=25
 ```
 
 ## 🚨 Alertas Automáticas
 
-El bot enviará alertas automáticamente por:
+- **Críticas**: VC caído, BN caído, EL caído, validador sin attestations
+- **Advertencias**: pocos peers, CPU/RAM/disco alto
 
-**Críticas** (inmediatas):
-- Validator Client caído
-- Beacon Node caído  
-- Execution Layer caído
-- Validator sin publicar attestations
+Las alertas se envían a Telegram vía Alertmanager.
 
-**Advertencias** (5-10 min):
-- Pocos peers conectados
-- Uso alto de CPU/RAM/Disco
+## 📊 Compatibilidad
 
-## 📊 Compatibilidad de Clientes
+- **EL**: Geth (`/debug/metrics`), Nethermind (`/metrics`), Besu (`/metrics`)
+- **BN**: Lighthouse, Prysm, Teku, Nimbus (ajusta puertos en `.env`)
+- **VC**: Lighthouse, Prysm, Teku, Nimbus
 
-### Execution Layer
-| Cliente | Puerto por Defecto | Path | Config |
-|---------|-------------------|------|--------|
-| **Geth** | 6060 | `/debug/metrics` | `--metrics --metrics.port 6060` |
-| **Nethermind** | 6060 | `/metrics` | `--Metrics.Enabled=true --Metrics.Port=6060` |
-| **Besu** | 9545 | `/metrics` | `--metrics-enabled --metrics-port=9545` |
+## 🔄 Reload / cambios en `.env`
 
-### Beacon Node
-| Cliente | Métricas | REST API | Config |
-|---------|----------|----------|--------|
-| **Lighthouse** | 5054 | 5052 | `--metrics --http` |
-| **Prysm** | 8080 | 3500 | `--monitoring-host=0.0.0.0` |
-| **Teku** | 8008 | 5051 | `--metrics-enabled --rest-api-enabled` |
-| **Nimbus** | 8008 | 5052 | `--metrics --rest` |
-
-### Validator Client  
-| Cliente | Puerto por Defecto | Config |
-|---------|-------------------|--------|
-| **Lighthouse** | 5064 | `--metrics` |
-| **Prysm** | 8081 | `--monitoring-host=0.0.0.0` |
-| **Teku** | 8009 | `--metrics-enabled` |
-| **Nimbus** | 8009 | `--metrics` |
-
-## 🐛 Solución de Problemas
-
-### El bot no responde
+- Si cambias valores en `.env`, los servicios necesitan reiniciarse:
 ```bash
-# Verifica que el bot esté corriendo
-docker-compose logs bot
-
-# Revisa la configuración
-cat .env | grep TELEGRAM
+docker compose up -d
 ```
 
-### No llegan alertas
+- Si el cambio es sólo en **umbrales de reglas** (`*_THRESHOLD`), podés hacer reload sin reiniciar:
 ```bash
-# Verifica Alertmanager
-docker-compose logs alertmanager
-
-# Comprueba el Chat ID
-curl "https://api.telegram.org/bot<TU_TOKEN>/getUpdates"
+curl -X POST http://127.0.0.1:9090/-/reload
+curl -X POST http://127.0.0.1:9093/-/reload
 ```
-
-### Métricas no disponibles
-```bash
-# Testa conexión directa
-curl http://127.0.0.1:5054/metrics  # Lighthouse BN
-curl http://127.0.0.1:6060/debug/metrics  # Geth
-
-# Revisa configuración de puertos
-netstat -tlnp | grep :5054
-```
-
-### El comando /nodo muestra "N/A"
-1. Verifica que los clientes expongan métricas en los puertos configurados
-2. Confirma que `ENABLE_*=true` para los componentes que usas
-3. Revisa que los paths sean correctos (`/metrics` vs `/debug/metrics`)
 
 ## 📁 Estructura del Proyecto
 
 ```
 faro-bot/
-├── .env.example              # Configuración de ejemplo
-├── docker-compose.yml        # Orquestación de servicios
+├── .env.example
+├── docker-compose.yml
 ├── bot/
-│   ├── Dockerfile            # Bot de Telegram
-│   ├── bot.py                # Lógica principal
-│   └── requirements.txt      # Dependencias Python
+│   ├── bot.py
+│   ├── Dockerfile
+│   └── requirements.txt
 ├── prometheus/
-│   ├── prometheus.yml.tmpl   # Config de Prometheus
-│   ├── entrypoint.sh         # Script de inicio
+│   ├── prometheus.yml.src
+│   ├── entrypoint.sh
 │   └── rules/
-│       └── faro-core.yml.tmpl # Reglas de alertas
+│       └── faro-core.yml.src
 └── alertmanager/
-    ├── alertmanager.yml.tmpl # Config de alertas
-    └── entrypoint.sh         # Script de inicio
+    ├── alertmanager.yml.src
+    └── entrypoint.sh
 ```
 
 ## 🔒 Seguridad
 
-- El bot solo expone métricas en `127.0.0.1` (localhost)
-- No almacena datos sensibles en disco
-- Las comunicaciones con Telegram son encriptadas (HTTPS)
-- Acceso restringido por Chat ID de Telegram
-
-## 🆘 Soporte
-
-- **Issues**: [GitHub Issues](https://github.com/Faus14/faro-bot/issues)
-- **Documentación**: Este README
-- **Telegram**: Contacta al desarrollador para soporte
-
-## 📄 Licencia
-
-Este proyecto está bajo la Licencia MIT. Ver archivo `LICENSE` para más detalles.
-
----
-
-**🛡️ Mantén tus validadores seguros con Faro Bot**
+- Métricas expuestas sólo en `127.0.0.1`
+- Acceso limitado por `chat_id`
+- Comunicación con Telegram encriptada (HTTPS)
