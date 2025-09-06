@@ -4,14 +4,14 @@ global:
 route:
   receiver: 'telegram'
   group_by: ['alertname','instance']
-  group_wait: 5s
-  group_interval: 30s
-  repeat_interval: 1h
+  group_wait: ${AM_GROUP_WAIT}
+  group_interval: ${AM_GROUP_INTERVAL}
+  repeat_interval: ${AM_REPEAT_INTERVAL}
 
 receivers:
 - name: 'telegram'
   telegram_configs:
-  - bot_token: '${TELEGRAM_BOT_TOKEN}'
+  - bot_token: "${TELEGRAM_BOT_TOKEN}"
     chat_id: ${ALERTS_CHAT_ID}
     parse_mode: 'HTML'
     message: |-

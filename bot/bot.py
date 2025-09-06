@@ -5,6 +5,10 @@ from typing import Dict, Any, Tuple, Optional
 from telegram import Update
 from telegram.ext import Application, CommandHandler, ContextTypes
 
+def _as_bool(s: str, default: bool) -> bool:
+    if s is None: return default
+    return str(s).strip().lower() in ("1","true","yes","y","on")
+
 # ===== Env =====
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
 BOT_NAME = os.getenv("BOT_PUBLIC_NAME", "@FaroBot")
@@ -13,9 +17,9 @@ BRAND = os.getenv("BRAND_NAME", "Faro")
 DEFAULT_ALIAS = os.getenv("DEFAULT_ALIAS", "LOCAL")
 VALIDATOR_INDEX_ENV = os.getenv("VALIDATOR_INDEX", "")
 
-ENABLE_EL = os.getenv("ENABLE_EL", "true").lower() == "true"
-ENABLE_BN = os.getenv("ENABLE_BN", "true").lower() == "true"
-ENABLE_VC = os.getenv("ENABLE_VC", "true").lower() == "true"
+ENABLE_EL = _as_bool(os.getenv("ENABLE_EL", "true"), True)
+ENABLE_BN = _as_bool(os.getenv("ENABLE_BN", "true"), True)
+ENABLE_VC = _as_bool(os.getenv("ENABLE_VC", "true"), True)
 
 EL_METRICS_HOSTPORT = os.getenv("EL_METRICS_HOSTPORT", "127.0.0.1:6060")
 EL_METRICS_PATH = os.getenv("EL_METRICS_PATH", "/debug/metrics")
@@ -57,7 +61,7 @@ def http_text(url: str, timeout: float = 6.0) -> Optional[str]:
     except Exception:
         return None
 
-# ===== Host metrics (sin Node Exporter para /host) =====
+# ===== Host metrics =====
 HOST_PROC = "/host/proc" if Path("/host/proc").exists() else "/proc"
 HOST_ROOT = "/host" if Path("/host").exists() else "/"
 
@@ -104,42 +108,27 @@ def disk_used_pct() -> int:
     except Exception:
         return 0
 
-# ===== Node queries / reachability =====
+# ===== Node queries =====
 def vc_status() -> Tuple[str, str]:
-    """
-    Returns (icon, text): ('ℹ️','N/A') if disabled,
-                          ('❌','DOWN') if enabled but unreachable,
-                          ('✅','OK') if metrics endpoint responds.
-    """
     if not ENABLE_VC:
         return "ℹ️", "N/A"
     txt = http_text(DEFAULT_VC_METRICS_URL, timeout=3)
     return ("✅","OK") if txt else ("❌","DOWN")
 
 def el_status_and_peers() -> Tuple[str, str]:
-    """
-    Returns (icon+status_text): peers_str and status ('ℹ️ N/A' | '❌ DOWN' | '✅ OK').
-    """
     if not ENABLE_EL:
         return "N/A", "ℹ️ N/A"
     txt = http_text(DEFAULT_EL_URL, timeout=3)
     if not txt:
         return "N/A", "❌ DOWN"
-    # parse peers
-    m = re.search(r"^geth_peers\s+(\d+)", txt, re.M)  # Geth
-    if not m: m = re.search(r"^nethermind_peers\s+(\d+)", txt, re.M)  # Nethermind
-    if not m: m = re.search(r"^besu_peers\s+(\d+)", txt, re.M)        # Besu
-    if not m: m = re.search(r'^"p2p/peers"\s+(\d+)', txt, re.M)       # fallback
-    peers = m.group(1) if m else "N/A"
+    m = (re.search(r"^geth_peers\s+(\d+)", txt, re.M) or
+         re.search(r"^nethermind_peers\s+(\d+)", txt, re.M) or
+         re.search(r"^besu_peers\s+(\d+)", txt, re.M) or
+         re.search(r'(^|\s)"?p2p/peers"?\s+(\d+)', txt, re.M))
+    peers = m.group(1) if (m and m.lastindex == 1) else (m.group(2) if m else "N/A")
     return peers, "✅ OK"
 
 def bn_status_info() -> Tuple[str, Dict[str, Any]]:
-    """
-    Returns (status_text, info_dict) where status is:
-    'ℹ️ N/A' if disabled,
-    '❌ DOWN' if enabled but REST no responde,
-    '✅ OK' if REST responde (con peers/sync).
-    """
     if not ENABLE_BN:
         return "ℹ️ N/A", {"is_syncing":"N/A", "peers":"N/A", "head_slot":"N/A"}
     js_sync = http_json(f"{DEFAULT_BN_REST_BASE}/eth/v1/node/syncing", timeout=4)
@@ -156,7 +145,7 @@ def bn_status_info() -> Tuple[str, Dict[str, Any]]:
         out["peers"] = src.get("connected", "N/A")
     return "✅ OK", out
 
-# ===== Handlers =====
+# ===== Bot commands =====
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     msg = (
         f"👋 Hola! Soy {BRAND} {BOT_NAME}\n\n"
@@ -164,7 +153,8 @@ async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"• /nodo [{DEFAULT_ALIAS}] — estado VC/BN/EL\n"
         f"• /host [{DEFAULT_ALIAS}] — CPU/RAM/Disco\n"
         f"• /atesta [{DEFAULT_ALIAS}] — última attestation + eficiencia\n"
-        "• /nodes — lista alias (en modo simple verás 1)\n"
+        "• /nodes — lista alias\n"
+        "• /id — mostrar chat_id\n"
     )
     await update.message.reply_text(msg)
 
@@ -193,7 +183,6 @@ async def cmd_nodo(update: Update, context: ContextTypes.DEFAULT_TYPE):
     bn_txt, bn = bn_status_info()
     el_peers, el_txt = el_status_and_peers()
 
-    # syncing texto
     sync = bn.get("is_syncing", "N/A")
     if str(sync).lower() in ("false","0"): sync_txt = "Sí"
     elif str(sync).lower() in ("true","1"): sync_txt = "No"
@@ -206,6 +195,10 @@ async def cmd_nodo(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"{'✅' if el_txt=='✅ OK' else ('❌' if el_txt=='❌ DOWN' else 'ℹ️')} EL: {el_txt.split(' ',1)[1] if ' ' in el_txt else el_txt} • peers {el_peers}"
     )
     await update.message.reply_text(msg)
+
+async def cmd_id(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cid = update.effective_chat.id
+    await update.message.reply_text(f"chat_id = {cid}")
 
 async def cmd_atesta(update: Update, context: ContextTypes.DEFAULT_TYPE):
     alias = _alias(context.args)
@@ -243,6 +236,7 @@ def main():
     app.add_handler(CommandHandler("host",   cmd_host))
     app.add_handler(CommandHandler("nodo",   cmd_nodo))
     app.add_handler(CommandHandler("atesta", cmd_atesta))
+    app.add_handler(CommandHandler("id", cmd_id))
     app.run_polling(close_loop=False)
 
 if __name__ == "__main__":

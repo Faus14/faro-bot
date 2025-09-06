@@ -1,13 +1,19 @@
 #!/bin/sh
 set -e
 
-# Render templates con variables de entorno
-envsubst < /etc/prometheus/prometheus.yml.tmpl > /etc/prometheus/prometheus.yml
-# para las rules usamos 'gomplate'-like con env en alert text; envsubst no procesa {{ }}.
-# Pero Prometheus ignora {{ .. }} en 'annotations' y no en expr. Para expr usamos envsubst simple:
-envsubst < /etc/prometheus/rules/faro-core.yml.tmpl > /etc/prometheus/rules/faro-core.yml
+# Render
+envsubst < /etc/prometheus/prometheus.yml.src > /etc/prometheus/prometheus.yml
+mkdir -p /etc/prometheus/rules
+envsubst < /etc/prometheus/rules/faro-core.yml.src > /etc/prometheus/rules/faro-core.yml
 
+# Validar sintaxis
+if command -v promtool >/dev/null 2>&1; then
+  promtool check config /etc/prometheus/prometheus.yml
+  promtool check rules /etc/prometheus/rules/faro-core.yml
+fi
+
+# Run
 exec /bin/prometheus \
   --config.file=/etc/prometheus/prometheus.yml \
   --storage.tsdb.path=/prometheus \
-  --web.listen-address=0.0.0.0:9090
+  --web.listen-address="${PROM_LISTEN}"

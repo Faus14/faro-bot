@@ -1,0 +1,101 @@
+groups:
+
+# ===== VALIDATOR =====
+- name: validator.rules
+  rules:
+  - alert: ValidatorNoAttestations
+    # habilitar con ENABLE_VALIDATOR_NOATTEST=1
+    expr: (${ENABLE_VALIDATOR_NOATTEST} == 1) and (increase(lighthouse_validator_attestations_published_total[5m]) == 0)
+    for: 3m
+    labels:
+      severity: critical
+      component: validator
+    annotations:
+      summary: "Validator no está publicando attestations"
+      description: "No se detectaron attestations en los últimos 5 minutos."
+  - alert: ValidatorDown
+    expr: (${ENABLE_VC_ALERT} == 1) and (up{job="validator"} == 0)
+    for: 1m
+    labels:
+      severity: critical
+      component: validator
+    annotations:
+      summary: "Validator Client DOWN"
+      description: "El VC no responde (job=validator)."
+
+# ===== BEACON =====
+- name: beacon.rules
+  rules:
+  - alert: BeaconNodeDown
+    expr: (${ENABLE_BN_ALERT} == 1) and (up{job="beacon"} == 0)
+    for: 1m
+    labels:
+      severity: critical
+      component: beacon
+    annotations:
+      summary: "Beacon Node DOWN"
+      description: "El BN no responde (job=beacon)."
+  - alert: BeaconPeersLow
+    expr: (${ENABLE_BN_ALERT} == 1) and (lighthouse_network_peers_total < ${BN_PEERS_THRESHOLD})
+    for: 5m
+    labels:
+      severity: warning
+      component: beacon
+    annotations:
+      summary: "Peers bajos en Beacon Node"
+      description: "Peers actuales: {{ $value }} (<${BN_PEERS_THRESHOLD})."
+
+# ===== EXECUTION =====
+- name: execution.rules
+  rules:
+  - alert: ExecutionNodeDown
+    expr: (${ENABLE_EL_ALERT} == 1) and (up{job="el"} == 0)
+    for: 1m
+    labels:
+      severity: critical
+      component: execution
+    annotations:
+      summary: "Execution Layer DOWN"
+      description: "El Execution Layer no responde (job=el)."
+  - alert: ExecutionPeersLow
+    expr: (${ENABLE_EL_ALERT} == 1) and ((geth_peers or nethermind_peers or besu_peers) < ${GETH_PEERS_THRESHOLD})
+    for: 5m
+    labels:
+      severity: warning
+      component: execution
+    annotations:
+      summary: "Peers bajos en EL"
+      description: "Peers actuales: {{ $value }} (<${GETH_PEERS_THRESHOLD})."
+
+# ===== HOST =====
+- name: host.rules
+  rules:
+  - alert: HostMemoryHigh
+    expr: (${ENABLE_HOST_ALERT} == 1) and ((1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) * 100 > ${HOST_MEM_THRESHOLD})
+    for: 1m
+    labels:
+      severity: warning
+      component: host
+    annotations:
+      summary: "Uso de RAM alto"
+      description: "RAM >${HOST_MEM_THRESHOLD}% (actual: {{ $value | printf \"%.1f\" }}%)."
+
+  - alert: HostDiskUsageHigh
+    expr: (${ENABLE_HOST_ALERT} == 1) and ((1 - (node_filesystem_avail_bytes{mountpoint="/",fstype!~"tmpfs|overlay"} / node_filesystem_size_bytes{mountpoint="/",fstype!~"tmpfs|overlay"}) ) * 100 > ${HOST_DISK_THRESHOLD})
+    for: 10m
+    labels:
+      severity: warning
+      component: host
+    annotations:
+      summary: "Uso de disco (/) alto"
+      description: "Disco / >${HOST_DISK_THRESHOLD}% (actual: {{ $value | printf \"%.1f\" }}%)."
+
+  - alert: HostCPUHigh
+    expr: (${ENABLE_HOST_ALERT} == 1) and (100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > ${HOST_CPU_THRESHOLD})
+    for: 10m
+    labels:
+      severity: warning
+      component: host
+    annotations:
+      summary: "CPU alta sostenida"
+      description: "CPU >${HOST_CPU_THRESHOLD}% por 10m (actual: {{ $value | printf \"%.1f\" }}%)."

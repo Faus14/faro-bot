@@ -1,0 +1,5 @@
+.env
+prometheus/data/
+alertmanager/data/
+__pycache__/
+*.pyc

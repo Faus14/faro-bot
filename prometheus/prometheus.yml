@@ -1,26 +1,31 @@
 global:
-  scrape_interval: 15s
-  evaluation_interval: 15s
+  scrape_interval: ${SCRAPE_INTERVAL}
+  evaluation_interval: ${EVAL_INTERVAL}
 
 rule_files:
   - /etc/prometheus/rules/faro-core.yml
 
 scrape_configs:
-  - job_name: 'geth'
+  - job_name: 'node_exporter'
+    static_configs:
+      - targets: ['${NODE_EXPORTER_HOSTPORT}']
+
+  - job_name: 'el'
     metrics_path: '${EL_METRICS_PATH}'
     static_configs:
       - targets: ['${EL_METRICS_HOSTPORT}']
 
-  - job_name: 'lighthouse_bn'
+  - job_name: 'beacon'
     metrics_path: '${BN_METRICS_PATH}'
     static_configs:
       - targets: ['${BN_METRICS_HOSTPORT}']
 
-  - job_name: 'lighthouse_vc'
+  - job_name: 'validator'
     metrics_path: '${VC_METRICS_PATH}'
     static_configs:
       - targets: ['${VC_METRICS_HOSTPORT}']
 
-  - job_name: 'node_exporter'
-    static_configs:
-      - targets: ['${NODE_EXPORTER_HOSTPORT}']
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['${AM_LISTEN}']
